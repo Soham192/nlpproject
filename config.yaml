@@ -1,0 +1,103 @@
+# Configuration for the selective audio redaction pipeline.
+# Loaded once at startup. No magic numbers in module code — put them here.
+
+audio:
+  # Pipeline is PCM-only. Lossy codecs break sample-exact reconstruction.
+  sample_rate: 16000
+  channels: 1
+  sample_width_bytes: 2        # 16-bit PCM
+  # Reject rather than silently transcode anything that isn't already WAV/PCM.
+  reject_non_wav: true
+
+asr:
+  model: "openai/whisper-small"   # bump to -medium / -large-v3 if accuracy is short
+  language: "en"
+  device: "auto"                  # "auto" = cuda if available else cpu (~5-10x slower)
+  compute_type: "float16"         # auto-switched to "int8" when running on CPU
+
+alignment:
+  # WhisperX wav2vec2 CTC aligner. Do NOT substitute Whisper's own segment
+  # timestamps here — they are too coarse for word-level masking.
+  model: "WAV2VEC2_ASR_BASE_960H"
+  device: "auto"
+  # Set true to use Montreal Forced Aligner instead (more accurate, needs a
+  # pronunciation dictionary and separate install). Fallback, not default.
+  use_mfa: false
+
+detection:
+  # Active entity set. Different compliance regimes need different sets —
+  # keep this list editable rather than hardcoding it in detect.py.
+  entities:
+    # Pattern-based (Presidio regex) — high precision
+    - CREDIT_CARD
+    - US_SSN
+    - PHONE_NUMBER
+    - EMAIL_ADDRESS
+    - IBAN_CODE
+    - DATE_TIME
+    # NER-based (spaCy) — context-dependent, lower precision
+    - PERSON
+    - LOCATION
+    # Custom recognizers (detect.py) — context-gated, domain-specific
+    - ACCOUNT_NUMBER
+    - MEDICAL_RECORD_NUMBER
+    - POLICY_NUMBER
+  spacy_model: "en_core_web_lg"
+  # Spans below this confidence are reported but not masked.
+  score_threshold: 0.5
+  # Whisper transcribes spoken digits as words ("four five three two").
+  # Presidio's regexes will miss those unless this normalization runs first.
+  # This is the most common cause of a silent detection failure — leave it on.
+  normalize_spoken_numbers: true
+
+masking:
+  # Padding around each span. Alignment is imperfect; clipping the first
+  # phoneme of a card number leaks information.
+  padding_ms: 100
+  # What the listener hears in place of the masked span.
+  # "silence" | "tone" | "beep"
+  replacement: "silence"
+  tone_hz: 1000                 # used only when replacement is tone/beep
+  cipher: "AES-GCM"
+  key_length_bytes: 32          # AES-256
+  # The key is NEVER written into the manifest. Path only, read at runtime.
+  key_file: "key.bin"
+
+evaluation:
+  # WER and BERTScore are computed over non-redacted spans ONLY. Including
+  # the masked regions would make the metric meaningless (silence doesn't
+  # transcribe, so WER would be dominated by deletions by construction).
+  exclude_masked_spans: true
+  bertscore_model: "roberta-large"   # pin it — don't let runs drift
+  bertscore_lang: "en"
+  # Normalization applied identically to reference and hypothesis before WER.
+  normalize:
+    lowercase: true
+    strip_punctuation: true
+    expand_contractions: true
+    remove_filler_words: false       # keep fillers; they're real content
+
+output:
+  dir: "data/outputs"
+  # Each stage writes its intermediate artifact under <dir>/<run_id>/ so the
+  # demo can show detection output separately from the final audio.
+  save_intermediates: true
+  manifest_suffix: ".manifest.json"
+
+logging:
+  level: "INFO"
+  # Per-stage timings. "How long per minute of audio" is a likely defense
+  # question — have the numbers ready rather than estimating on the spot.
+  log_stage_timings: true
+
+api:
+  # DEMO ONLY. Lets the web UI play the unredacted original — which contains
+  # exactly the PII this system exists to protect. A real deployment turns this
+  # off (or set env ALLOW_ORIGINAL_PLAYBACK=0, which overrides this value).
+  allow_original_playback: true
+  # Uploads larger than this are rejected before they're processed.
+  max_upload_mb: 100
+  # Where the API keeps per-upload files (original, masked, manifest, metrics).
+  workdir: "data/outputs/api"
+  # Vite dev server origin allowed by CORS.
+  cors_origins: ["http://localhost:5173", "http://127.0.0.1:5173"]

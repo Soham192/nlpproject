@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "selective-audio-redaction"
+version = "0.1.0"
+description = "Reversible, key-based masking of sensitive spans in voice recordings, with content-preservation verification."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pyyaml",
+    "cryptography",
+    "torch",
+    "torchaudio",
+    "whisperx",
+    "presidio-analyzer",
+    "spacy",
+    "jiwer",
+    "bert-score",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "gTTS", "httpx"]
+api = ["fastapi", "uvicorn[standard]", "python-multipart"]
+
+[project.scripts]
+redact = "src.cli:main"
+
+[tool.setuptools]
+packages = ["src", "api"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

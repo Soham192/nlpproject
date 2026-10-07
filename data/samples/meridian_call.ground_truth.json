@@ -1,0 +1,95 @@
+{
+  "audio": "meridian_call.wav",
+  "entities": [
+    {
+      "entity_type": "PERSON",
+      "text": "Priya",
+      "start_sec": 3.585,
+      "end_sec": 4.045
+    },
+    {
+      "entity_type": "PERSON",
+      "text": "Priya",
+      "start_sec": 8.035,
+      "end_sec": 8.592
+    },
+    {
+      "entity_type": "PERSON",
+      "text": "Rohan Mehta",
+      "start_sec": 9.887,
+      "end_sec": 11.097
+    },
+    {
+      "entity_type": "PERSON",
+      "text": "Rohan",
+      "start_sec": 18.051,
+      "end_sec": 18.678
+    },
+    {
+      "entity_type": "ACCOUNT_NUMBER",
+      "text": "8 8 2 4, 1 9 0 3",
+      "start_sec": 23.398,
+      "end_sec": 26.636
+    },
+    {
+      "entity_type": "CREDIT_CARD",
+      "text": "4 1 1 1, 1 1 1 1, 1 1 1 1, 1 1 1 1",
+      "start_sec": 33.586,
+      "end_sec": 40.466
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "text": "14th of March, 1988",
+      "start_sec": 46.927,
+      "end_sec": 49.994
+    },
+    {
+      "entity_type": "US_SSN",
+      "text": "9 0 0, 5 5, 4 8 2 1",
+      "start_sec": 53.914,
+      "end_sec": 59.081
+    },
+    {
+      "entity_type": "PHONE_NUMBER",
+      "text": "5 5 5, 0 1 4 7",
+      "start_sec": 65.064,
+      "end_sec": 69.392
+    },
+    {
+      "entity_type": "EMAIL_ADDRESS",
+      "text": "rohan.mehta@example.com",
+      "start_sec": 73.735,
+      "end_sec": 76.757
+    },
+    {
+      "entity_type": "LOCATION",
+      "text": "Pune",
+      "start_sec": 84.486,
+      "end_sec": 85.067
+    },
+    {
+      "entity_type": "LOCATION",
+      "text": "Nagpur",
+      "start_sec": 93.885,
+      "end_sec": 94.84
+    },
+    {
+      "entity_type": "POLICY_NUMBER",
+      "text": "P 4 7 7 3 1",
+      "start_sec": 115.502,
+      "end_sec": 118.04
+    },
+    {
+      "entity_type": "PERSON",
+      "text": "Rohan",
+      "start_sec": 119.365,
+      "end_sec": 119.993
+    },
+    {
+      "entity_type": "PERSON",
+      "text": "Priya",
+      "start_sec": 128.506,
+      "end_sec": 129.064
+    }
+  ]
+}

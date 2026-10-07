@@ -1,0 +1,18 @@
+# secrets
+key.bin
+*.key
+.env*
+
+# python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# web
+web/node_modules/
+web/dist/
+
+# generated artifacts
+data/outputs/

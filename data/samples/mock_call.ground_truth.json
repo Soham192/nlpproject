@@ -1,0 +1,41 @@
+{
+  "audio": "mock_call.wav",
+  "entities": [
+    {
+      "entity_type": "PERSON",
+      "text": "Michael Johnson",
+      "start_sec": 7.73,
+      "end_sec": 8.906
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "text": "March 14th, 1985",
+      "start_sec": 12.995,
+      "end_sec": 15.662
+    },
+    {
+      "entity_type": "CREDIT_CARD",
+      "text": "4 1 1 1, 1 1 1 1, 1 1 1 1, 1 1 1 1",
+      "start_sec": 29.531,
+      "end_sec": 36.351
+    },
+    {
+      "entity_type": "US_SSN",
+      "text": "5 1 2, 3 8, 4 7 2 1",
+      "start_sec": 47.241,
+      "end_sec": 51.157
+    },
+    {
+      "entity_type": "PHONE_NUMBER",
+      "text": "4 1 5, 5 5 5, 0 1 3 2",
+      "start_sec": 57.121,
+      "end_sec": 61.943
+    },
+    {
+      "entity_type": "LOCATION",
+      "text": "Springfield, Illinois",
+      "start_sec": 64.502,
+      "end_sec": 65.9
+    }
+  ]
+}
