@@ -17,7 +17,7 @@ import numpy as np
 
 from . import alignment, asr
 from .audio import load_wav, to_float_mono
-from .config import Config, EvaluationConfig, NormalizeConfig, resolve_device
+from .config import Config, EvaluationConfig, NormalizeConfig, ae_integration, resolve_device
 from .manifest import Manifest
 from .timing import StageTimer
 
@@ -174,7 +174,7 @@ def evaluate(original_path: str | Path, masked_path: str | Path, manifest: Manif
     def words_for(samples: np.ndarray, tag: str) -> list[alignment.Word]:
         audio = to_float_mono(samples)
         with timer.stage(f"asr_{tag}"):
-            res = asr.transcribe(audio, cfg.asr)
+            res = asr.transcribe(audio, cfg.asr, ae_frontend=ae_integration(cfg.raw, "asr_frontend"))
         with timer.stage(f"align_{tag}"):
             return alignment.align(res["segments"], audio, cfg.alignment, res.get("language", "en"))
 
@@ -197,6 +197,14 @@ def evaluate(original_path: str | Path, masked_path: str | Path, manifest: Manif
     }
     if ground_truth is not None:
         metrics["entities"] = entity_metrics(manifest, ground_truth)
+    ae = ae_integration(cfg.raw, "leak_check")
+    if ae is not None:  # optional AE leak check, off by default
+        from .autoencoders.frontend import leak_check
+
+        with timer.stage("leak_check"):
+            metrics["leak_check"] = leak_check(to_float_mono(masked), manifest.spans, manifest.source.sample_rate,
+                                               cfg.masking.replacement, ae)
+        metrics["timings_sec"] = timer.as_dict()
     if out_dir:
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)

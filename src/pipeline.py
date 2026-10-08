@@ -16,7 +16,7 @@ import numpy as np
 
 from . import alignment, asr, detect, mapping, mask
 from .audio import AudioParams, load_wav, sha256_file, to_float_mono, write_wav_like
-from .config import Config
+from .config import Config, ae_integration
 from .manifest import CipherInfo, Manifest, MaskedInfo, SourceInfo, Span, text_preview, write_manifest
 from .timing import StageTimer
 
@@ -82,9 +82,27 @@ class Pipeline:
         (self.out_dir / name).write_text(json.dumps(obj, indent=2), encoding="utf-8")
 
     # -- stages ----------------------------------------------------------------
+    def run_ingest_gate(self, samples: np.ndarray) -> dict | None:
+        """Optional AE quality gate (off by default). Reads the audio, never modifies it."""
+        ae = ae_integration(self.cfg.raw, "ingest_gate")
+        if ae is None:
+            return None
+        from .autoencoders.frontend import ingest_score
+
+        with self.timer.stage("ingest_gate"):
+            res = ingest_score(to_float_mono(samples), ae)
+        self.save("ingest_gate.json", res)
+        if res["flagged"]:
+            msg = f"ingest gate: input does not look like usable speech (score {res['score']:.4f} >= {res['threshold']})"
+            if res["action"] == "reject":
+                raise ValueError(msg)
+            log.warning(msg)
+        return res
+
     def run_asr(self, samples: np.ndarray) -> dict:
         with self.timer.stage("asr"):
-            res = asr.transcribe(to_float_mono(samples), self.cfg.asr)
+            res = asr.transcribe(to_float_mono(samples), self.cfg.asr,
+                                 ae_frontend=ae_integration(self.cfg.raw, "asr_frontend"))
         self.save("transcript.json", res)
         return res
 
@@ -126,6 +144,7 @@ class Pipeline:
         set (the UI's checkboxes) only needs to redo detection and mapping.
         """
         samples, params = load_wav(input_path, self.cfg.audio)
+        self.run_ingest_gate(samples)
         if words is None:
             res = self.run_asr(samples)
             words = self.run_alignment(res, samples)

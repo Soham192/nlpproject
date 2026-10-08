@@ -1,0 +1,10 @@
+# Autoencoder study (Colab). torch/numpy come preinstalled on Colab and are deliberately not listed,
+# so pip doesn't replace Colab's CUDA build. Install with:
+#   pip install -r requirements-ae.txt && pip install -e . --no-deps
+openai-whisper==20250625
+datasets>=2.19
+soundfile>=0.12
+pyyaml
+jiwer
+matplotlib
+cryptography

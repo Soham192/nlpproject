@@ -16,3 +16,11 @@ web/dist/
 
 # generated artifacts
 data/outputs/
+
+# autoencoder study: weights and datasets are never committed
+*.pt
+*.pt.tmp
+checkpoints/
+redact_ae/
+redact_ae_cache/
+data/ae_cache/

@@ -24,8 +24,16 @@ def _load(name: str, device: str, compute_type: str, language: str):
     return whisperx.load_model(name, device, compute_type=compute_type, language=language)
 
 
-def transcribe(audio: np.ndarray, cfg: ASRConfig, batch_size: int = 8) -> dict:
-    """audio: float32 mono 16 kHz. Returns {"language", "segments": [{"text","start","end"}]}."""
+def transcribe(audio: np.ndarray, cfg: ASRConfig, batch_size: int = 8, ae_frontend: dict | None = None) -> dict:
+    """audio: float32 mono 16 kHz. Returns {"language", "segments": [{"text","start","end"}]}.
+
+    ae_frontend: the `autoencoder:` config when the optional AE ASR front-end is enabled. It cleans a copy
+    of Whisper's mel in memory (openai-whisper backend); the audio itself is never modified.
+    """
+    if ae_frontend is not None:
+        from .autoencoders.frontend import transcribe_with_frontend
+
+        return transcribe_with_frontend(audio, cfg, ae_frontend)
     device = resolve_device(cfg.device)
     model = _load(_model_name(cfg.model), device, resolve_compute_type(cfg.compute_type, device), cfg.language)
     result = model.transcribe(audio, batch_size=batch_size, language=cfg.language)

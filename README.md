@@ -125,10 +125,18 @@ To generate new synthetic calls with exact ground truth (requires internet for g
 python scripts/make_sample.py --call meridian_call
 ```
 
+## Optional: autoencoder study
+
+`src/autoencoders/` trains four autoencoders (dense, sparse, denoising, VAE) on Whisper log-mel windows, and scores each one at three pipeline layers: an ingest quality gate, an ASR front-end that cleans a *copy* of Whisper's mel, and a leak check on masked spans. Each layer is compared against a non-learned baseline. Training and GPU evaluation run on Colab only, through [`notebooks/train_autoencoders_colab.ipynb`](notebooks/train_autoencoders_colab.ipynb). Results are collected by `python -m src.autoencoders.compare` into `results/autoencoder_comparison.md`.
+
+All of it is off by default (`autoencoder.integrations.*.enabled: false`). With the flags off, the pipeline never imports it. Detection stays Presidio + spaCy, and the output audio is never touched.
+
 ## Repo layout
 
 ```
 src/        pipeline stages: asr, alignment, detect, mapping, mask, manifest, evaluate, demo, cli
+src/autoencoders/   optional AE study: models, data, train, eval_{ingest,asr,leak}, bench_cpu, compare
+notebooks/  thin Colab runner for the AE study
 api/        FastAPI backend for the web UI (in-process job queue)
 web/        React + Vite frontend
 tests/      round-trip, mapping, detection, manifest, evaluation, API tests

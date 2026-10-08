@@ -24,12 +24,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "gTTS", "httpx"]
 api = ["fastapi", "uvicorn[standard]", "python-multipart"]
+ae = ["openai-whisper", "datasets>=2.19", "soundfile>=0.12"]
 
 [project.scripts]
 redact = "src.cli:main"
 
 [tool.setuptools]
-packages = ["src", "api"]
+packages = ["src", "src.autoencoders", "api"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

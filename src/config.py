@@ -135,6 +135,15 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
         return _build(yaml.safe_load(f))
 
 
+def ae_integration(raw: dict, name: str) -> dict | None:
+    """The `autoencoder:` section if `autoencoder.integrations.<name>.enabled`, else None.
+
+    Lets callers check the flag without importing src.autoencoders (or torch models) when it is off.
+    """
+    ae = raw.get("autoencoder") or {}
+    return ae if ((ae.get("integrations") or {}).get(name) or {}).get("enabled") else None
+
+
 def resolve_device(device: str) -> str:
     """'auto' -> 'cuda' when available, else 'cpu'."""
     if device != "auto":

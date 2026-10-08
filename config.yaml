@@ -101,3 +101,96 @@ api:
   workdir: "data/outputs/api"
   # Vite dev server origin allowed by CORS.
   cors_origins: ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+autoencoder:
+  # Optional research add-on: four AE variants compared at three pipeline layers
+  # (ingest gate, ASR front-end, leak check). Training/GPU eval runs on Colab only.
+  # Nothing here is used by the pipeline unless an `integrations.*.enabled` is true.
+  seed: 1337
+  variants: [dense, sparse, dae, vae]
+  drive_root: "/content/drive/MyDrive/redact_ae"   # checkpoints, logs, metrics
+  local_cache: "/content/redact_ae_cache"          # fast local copy of the feature cache
+  features:
+    whisper_model: "small"       # openai-whisper name; features via whisper.log_mel_spectrogram
+    n_mels: 80
+    window_frames: 16            # model input = 16 frames x 80 mels, flattened
+    ola_hop_frames: 4            # overlap-add hop for full-spectrogram application
+  data:
+    dataset: "openslr/librispeech_asr"
+    config: "clean"
+    revision: "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1"
+    train_split: "train.100"
+    dev_split: "validation"      # dev-clean: validation loss, thresholds, lambda/beta selection
+    test_split: "test"           # test-clean: final evaluation only, never tuned on
+    train_hours: 10.0
+    train_speakers: 251          # train-clean-100 speaker count; per-speaker quota = hours / speakers
+    max_utt_sec: 30.0            # Whisper's input window
+    dev_val_utts: 600
+    dev_tune_utts: 400
+    test_asr_utts: 200
+    test_ingest_utts: 300
+    test_leak_utts: 300
+  model:
+    hidden: [512, 256]
+    latent: 64
+  train:
+    optimizer: "adam"
+    lr: 1.0e-3
+    weight_decay: 0.0
+    batch_size: 512
+    epochs: 40
+    grad_clip: 1.0
+    windows_per_epoch: 225000
+    val_hop_frames: 8
+    keep_epoch_checkpoints: 2    # latest.pt and best.pt are always kept as well
+  # The only per-variant knobs. Each grid is searched on dev-clean, picked per layer.
+  variant_hparams:
+    sparse: {name: "l1_weight", grid: [1.0e-4, 1.0e-3, 1.0e-2]}
+    vae: {name: "beta", grid: [0.1, 0.5, 1.0]}
+  corruption:
+    snr_db: [0.0, 20.0]
+    pink_noise_prob: 0.5
+    bandlimit_prob: 0.5
+    bandlimit_hz: [300, 3400]
+    mulaw_prob: 0.5
+    mulaw_channels: 256
+  eval:
+    batch_windows: 8192
+    ingest:
+      dc_offset: 0.4
+      clip_gain: 20.0
+      noise_dbfs: -20.0
+      tone_hz: [200, 3000]
+      mulaw_heavy_channels: 16
+    asr:
+      snrs_db: [20, 10, 5, 0]    # each = noise + telephone band-limit + mu-law
+      batch_size: 16
+      clean_wer_tolerance_pp: 0.5
+      dev_select_utts: 50
+      dev_select_snr_db: 10
+    leak:
+      fills: [silence, tone, noise]
+      fragment_ms: [25, 50]      # 0 ms = negatives
+      span_ms: [400, 1500]
+      tone_hz: 1000
+      noise_dbfs: -45.0
+      vad_rel_db: -30.0
+      dev_spans: 200
+  bench:
+    audio_sec: 60
+    warmup: 3
+    repeats: 20
+  integrations:
+    # All off by default: with these false, the CLI behaves exactly as without autoencoders.
+    ingest_gate:
+      enabled: false
+      checkpoint: ""             # path to a best.pt
+      threshold: null            # from <variant>/ingest/metrics.json -> chosen.threshold
+      action: "warn"             # warn | reject
+    asr_frontend:
+      enabled: false
+      checkpoint: ""             # cleans a COPY of Whisper's mel; output audio is never touched
+    leak_check:
+      enabled: false
+      checkpoint: ""
+      metrics: ""                # <variant>/leak/metrics.json (holds per-fill calibration + threshold)
