@@ -165,7 +165,7 @@ def render(res: dict, cfg: AEConfig, curves: dict[str, list[str]]) -> str:
     # Cost / provenance
     L += ["## Model size, CPU latency and tuned values", "",
           "| Variant | Parameters | CPU ms per min of audio: AE clean (OLA) | AE score (hop 1) | log-mel | "
-          "λ/β chosen for L1 / L2 / L5 |", "|---|---|---|---|---|---|"]
+          "tuned value chosen for L1 / L2 / L5 (sparse λ, DAE min SNR dB, VAE β) |", "|---|---|---|---|---|---|"]
     for v in vs:
         lat = res[v]["latency"]
         pc = _get(lat, "param_count") or _get(res[v]["ingest"], "param_count")

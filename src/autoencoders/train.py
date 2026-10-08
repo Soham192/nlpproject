@@ -1,6 +1,6 @@
 """Train one AE variant on the cached LibriSpeech features (Colab GPU only).
 
-    python -m src.autoencoders.train --variant dae --resume
+    python -m src.autoencoders.train --variant dae --resume      # trains every min_snr_db in the grid
     python -m src.autoencoders.train --variant sparse            # trains every l1_weight in the grid
     python -m src.autoencoders.train --variant vae --hparam 0.5  # one grid value
 
@@ -152,13 +152,14 @@ def train_run(cfg: AEConfig, variant: str, hparam: float | None, resume: bool, d
         print(f"resuming {rd.name} from epoch {start}/{t['epochs']}", flush=True)
 
     val_starts = val.grid_starts(t["val_hop_frames"])
+    corruption = model.corruption_cfg(cfg.corruption) if model.corrupts_input else None
     if model.corrupts_input:
-        val.recorrupt(cfg.corruption, torch.Generator(device=device).manual_seed(cfg.seed + VAL_SEED_OFFSET))
+        val.recorrupt(corruption, torch.Generator(device=device).manual_seed(cfg.seed + VAL_SEED_OFFSET))
     info = {"variant": variant, "hparam": hparam, "hparams": model.hparams(), "param_count": param_count(model),
             "train_utts": len(train.index), "train_windows_available": len(train.valid_starts),
             "val_utts": len(val.index), "val_windows": len(val_starts),
             "model": cfg.model, "train": t, "features": cfg.features.__dict__,
-            "corruption": cfg.corruption if model.corrupts_input else None, **provenance(cfg)}
+            "corruption": corruption, **provenance(cfg)}
     rd.mkdir(parents=True, exist_ok=True)
     write_json(rd / "run_info.json", info)
     print(f"{variant} {model.hparams()} params={info['param_count']:,}", flush=True)
@@ -168,7 +169,7 @@ def train_run(cfg: AEConfig, variant: str, hparam: float | None, resume: bool, d
         t0 = time.time()
         g = epoch_generator(cfg.seed, epoch, device)
         if model.corrupts_input:
-            train.recorrupt(cfg.corruption, g)
+            train.recorrupt(corruption, g)
         t_corrupt = time.time() - t0
         sums: dict[str, float] = {}
         for _ in range(steps):
@@ -213,7 +214,7 @@ def train_run(cfg: AEConfig, variant: str, hparam: float | None, resume: bool, d
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--variant", required=True, choices=VARIANTS)
-    ap.add_argument("--hparam", type=float, default=None, help="one grid value (sparse: l1_weight, vae: beta)")
+    ap.add_argument("--hparam", type=float, default=None, help="one grid value (sparse: l1_weight, vae: beta, dae: min_snr_db)")
     ap.add_argument("--resume", action="store_true", help="continue from latest.pt if present")
     ap.add_argument("--fresh", action="store_true", help="delete existing checkpoints for this run first")
     ap.add_argument("--drive-root", default=None)

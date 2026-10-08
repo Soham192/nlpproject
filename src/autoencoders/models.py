@@ -4,7 +4,7 @@ Fairness: every variant has the same encoder/decoder layer sizes and latent size
 The only differences are what defines each variant:
   dense   plain MSE reconstruction
   sparse  + L1 penalty on the latent activations
-  dae     corrupted input, clean target (the corruption lives in data.py; the model is identical to dense)
+  dae     corrupted input, clean target (corruption in data.py, strength = min_snr_db; network identical to dense)
   vae     encoder emits (mu, logvar) — the extra logvar head is the only parameter difference — plus KL
 """
 from __future__ import annotations
@@ -97,8 +97,24 @@ class SparseAE(AutoEncoder):
 
 
 class DenoisingAE(AutoEncoder):
+    """Identical network to the dense AE; only its training input is corrupted. `min_snr_db` sets the
+    corruption strength (training SNR ~ U(min_snr_db, upper bound from config))."""
+
     variant = "dae"
     corrupts_input = True
+
+    def __init__(self, *a, min_snr_db: float, **kw) -> None:
+        super().__init__(*a, **kw)
+        self.min_snr_db = float(min_snr_db)
+
+    def corruption_cfg(self, base: dict) -> dict:
+        lo, hi = base["snr_db"]
+        if not self.min_snr_db < hi:
+            raise ValueError(f"min_snr_db={self.min_snr_db} must be below the upper SNR bound {hi}")
+        return {**base, "snr_db": [self.min_snr_db, hi]}
+
+    def hparams(self):
+        return {"min_snr_db": self.min_snr_db}
 
 
 class VAE(AutoEncoder):
@@ -157,7 +173,7 @@ def build(variant: str, cfg: AEConfig, hparam: float | None = None) -> AutoEncod
     if variant == "sparse":
         return SparseAE(*dims, l1_weight=hparam)
     if variant == "dae":
-        return DenoisingAE(*dims)
+        return DenoisingAE(*dims, min_snr_db=hparam)
     return VAE(*dims, beta=hparam)
 
 

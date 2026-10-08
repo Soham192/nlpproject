@@ -143,12 +143,15 @@ autoencoder:
     windows_per_epoch: 225000
     val_hop_frames: 8
     keep_epoch_checkpoints: 2    # latest.pt and best.pt are always kept as well
-  # The only per-variant knobs. Each grid is searched on dev-clean, picked per layer.
+  # The only per-variant knobs, one 3-value grid per tunable variant (same budget for each).
+  # Each grid is searched on dev-clean only, picked per layer.
   variant_hparams:
     sparse: {name: "l1_weight", grid: [1.0e-4, 1.0e-3, 1.0e-2]}
     vae: {name: "beta", grid: [0.1, 0.5, 1.0]}
+    # DAE corruption strength: training SNR ~ U(min_snr_db, corruption.snr_db[1]). Lower = stronger noise.
+    dae: {name: "min_snr_db", grid: [0.0, 5.0, 10.0]}
   corruption:
-    snr_db: [0.0, 20.0]
+    snr_db: [0.0, 20.0]          # DAE training range; the lower end is replaced by the dae grid value
     pink_noise_prob: 0.5
     bandlimit_prob: 0.5
     bandlimit_hz: [300, 3400]

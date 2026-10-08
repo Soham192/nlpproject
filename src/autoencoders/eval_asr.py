@@ -19,8 +19,8 @@ import torch
 
 from ..config import load_config
 from ..evaluate import normalize_text, wer
-from .common import (baseline_dir, candidate_runs, layer_dir, load_model, provenance, require_gpu,
-                     seed_everything, write_json, write_jsonl)
+from .common import (baseline_dir, candidate_runs, layer_dir, load_model, provenance, record_choice,
+                     require_gpu, seed_everything, write_json, write_jsonl)
 from .config import VARIANTS, AEConfig, load_ae_config
 from .data import HOP, SplitCache, ensure_local_cache, load_split, telephone_chain
 from .degrade import to_pcm_grid
@@ -189,6 +189,7 @@ def run_variant(cfg: AEConfig, variant: str) -> dict:
                "dev_selection": {"utterances": a["dev_select_utts"], "conditions": _dev_conds(cfg)},
                "param_count": param_count(best["_model"]), **provenance(cfg)}
     write_json(layer_dir(cfg, variant, "asr") / "metrics.json", metrics)
+    record_choice(cfg, variant, "asr", best["hparam"])
     return metrics
 
 

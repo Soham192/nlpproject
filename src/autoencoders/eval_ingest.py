@@ -15,7 +15,7 @@ import numpy as np
 import torch
 
 from .common import (auroc, baseline_dir, best_f1_threshold, candidate_runs, f1_at, layer_dir, load_model,
-                     provenance, require_gpu, seed_everything, write_json, write_jsonl)
+                     provenance, record_choice, require_gpu, seed_everything, write_json, write_jsonl)
 from .config import VARIANTS, AEConfig, load_ae_config
 from .data import SplitCache, ensure_local_cache, load_split, log_mel
 from .degrade import INGEST_KINDS, make_unusable, rms_db
@@ -94,6 +94,7 @@ def run_variant(cfg: AEConfig, variant: str) -> dict:
                "candidates": [{k: v for k, v in d.items() if not k.startswith("_")} for d in cands],
                "param_count": param_count(model), **provenance(cfg)}
     write_json(layer_dir(cfg, variant, "ingest") / "metrics.json", metrics)
+    record_choice(cfg, variant, "ingest", best["hparam"])
     return metrics
 
 

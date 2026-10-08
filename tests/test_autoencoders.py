@@ -272,9 +272,121 @@ def test_scores_jsonl_rows(tmp_path):
     split = data.SplitCache(np.zeros(1), np.zeros((1, 80)), [{"id": "a"}, {"id": "b"}])
     rows = eval_ingest.item_rows("dense", "test", split, [0.1, 0.2], [0.9, 0.8], ["tone", "silence"])
     assert [(r["id"], r["label"]) for r in rows] == [("a#clean", 0), ("b#clean", 0), ("a#tone", 1), ("b#silence", 1)]
-    ex = [eval_leak.Example("u1", "tone", 0, "leading", np.zeros(1)), eval_leak.Example("u1", "tone", 25, "leading", np.zeros(1))]
+    ex = [eval_leak.Example("u1", "tone", 0, "leading", np.zeros(1), "test_leak"),
+          eval_leak.Example("u1", "tone", 25, "leading", np.zeros(1), "test_leak")]
     lrows = eval_leak.item_rows("vae", "test", ex, {"calibrated": np.array([1.0, 5.0]), "literal": np.array([-1.0, -0.5])})
     assert [(r["label"], r["score"], r["score_literal"], r["frag_ms"]) for r in lrows] == [(0, 1.0, -1.0, 0), (1, 5.0, -0.5, 25)]
     write_jsonl(tmp_path / "scores.jsonl", rows + lrows)
     back = read_jsonl(tmp_path / "scores.jsonl")
     assert back == rows + lrows and all({"id", "label", "score", "variant"} <= set(r) for r in back)
+
+
+# --------------------------------------------------------------------------- dev-only fitting (layer 5)
+
+def _leak_examples(split_name, utts=("u1", "u2")):
+    from src.autoencoders.eval_leak import Example
+
+    return [Example(u, fill, f, "leading", np.zeros(1), split_name)
+            for u in utts for fill in ("silence", "tone", "noise") for f in (0, 25, 50)]
+
+
+def test_leak_calibration_rejects_test_items(ae_cfg):
+    from src.autoencoders.eval_leak import calibrate, thresholds
+
+    c = ae_cfg.eval["leak"]
+    dev = _leak_examples("dev_tune")
+    errs = [np.random.default_rng(i).random(5) for i in range(len(dev))]
+    calibrate(dev, errs, c)  # dev only: fine
+    thresholds(dev, np.arange(len(dev), dtype=float), c)
+    mixed = dev + _leak_examples("test_leak", ("t1",))
+    merrs = errs + [np.zeros(5)] * (len(mixed) - len(dev))
+    with pytest.raises(ValueError, match="dev items only"):
+        calibrate(mixed, merrs, c)
+    with pytest.raises(ValueError, match="dev items only"):
+        thresholds(mixed, np.arange(len(mixed), dtype=float), c)
+
+
+def test_leak_eval_fits_calibration_on_dev_only(monkeypatch, tmp_path, ae_cfg):
+    """Run eval_leak.run_variant end to end on a synthetic cache and record which split's items reach
+    calibrate() and thresholds(). Fails if any test-split item is used for fitting."""
+    import dataclasses
+    from src.autoencoders import eval_leak
+
+    rng = np.random.default_rng(0)
+
+    def split(prefix, n):
+        audios, index, so = [], [], 0
+        for i in range(n):
+            t = np.arange(32000) / 16000
+            a = (0.3 * np.sin(2 * np.pi * 200 * t) * (np.sin(2 * np.pi * 2 * t) > 0)
+                 + 0.01 * rng.standard_normal(len(t)))
+            pcm = (a * 32767).astype(np.int16)
+            index.append({"id": f"{prefix}{i}", "speaker_id": i, "sample_offset": so, "n_samples": len(pcm),
+                          "frame_offset": 0, "n_frames": 0})
+            audios.append(pcm)
+            so += len(pcm)
+        return data.SplitCache(np.concatenate(audios), np.zeros((1, 80)), index)
+
+    splits = {"dev_tune": split("d", 4), "test_leak": split("t", 4)}
+    cfg = dataclasses.replace(ae_cfg, drive_root=tmp_path, eval={**ae_cfg.eval, "leak": {**ae_cfg.eval["leak"], "dev_spans": 4}})
+    seen = {"calibrate": set(), "thresholds": set()}
+    real_cal, real_thr = eval_leak.calibrate, eval_leak.thresholds
+
+    def spy_cal(ex, errs, c):
+        seen["calibrate"] |= {e.split for e in ex}
+        return real_cal(ex, errs, c)
+
+    def spy_thr(ex, scores, c):
+        seen["thresholds"] |= {e.split for e in ex}
+        return real_thr(ex, scores, c)
+
+    class Stub(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.w = torch.nn.Parameter(torch.zeros(1))
+
+    monkeypatch.setattr(eval_leak, "calibrate", spy_cal)
+    monkeypatch.setattr(eval_leak, "thresholds", spy_thr)
+    monkeypatch.setattr(eval_leak, "require_gpu", lambda: "cpu")
+    monkeypatch.setattr(eval_leak, "ensure_local_cache", lambda cfg: tmp_path)
+    monkeypatch.setattr(eval_leak, "load_split", lambda root, name: splits[name])
+    monkeypatch.setattr(eval_leak, "candidate_runs", lambda cfg, v: [(None, tmp_path / "run")])
+    monkeypatch.setattr(eval_leak, "load_model", lambda *a, **k: Stub())
+    monkeypatch.setattr(eval_leak, "param_count", lambda m: 0)
+    monkeypatch.setattr(eval_leak, "window_errors",
+                        lambda model, ex, cfg, device: [np.abs(e.audio[:20]) + 0.1 for e in ex])
+    m = eval_leak.run_variant(cfg, "dense")
+    assert seen["calibrate"] == {"dev_tune"} and seen["thresholds"] == {"dev_tune"}
+    assert set(m["chosen"]["calibration"]) == set(ae_cfg.eval["leak"]["fills"])
+
+
+# --------------------------------------------------------------------------- DAE sweep
+
+def test_dae_sweeps_corruption_strength(ae_cfg):
+    grid = ae_cfg.hparam_grid("dae")
+    assert grid is not None and len(grid[1]) == 3
+    assert all(len(ae_cfg.hparam_grid(v)[1]) == 3 for v in ("sparse", "dae", "vae"))  # same tuning budget
+    for v in grid[1]:
+        m = build("dae", ae_cfg, v)
+        c = m.corruption_cfg(ae_cfg.corruption)
+        assert c["snr_db"] == [v, ae_cfg.corruption["snr_db"][1]]
+        assert param_count(m) == 1_608_512  # network unchanged by the knob
+
+
+def test_record_choice_writes_run_info(tmp_path, ae_cfg):
+    import dataclasses
+    from src.autoencoders.common import read_json, record_choice, run_dir, write_json
+
+    cfg = dataclasses.replace(ae_cfg, drive_root=tmp_path)
+    for v in cfg.hparam_grid("dae")[1]:
+        write_json(run_dir(cfg, "dae", v) / "run_info.json", {"hparam": v})
+    record_choice(cfg, "dae", "ingest", 5.0)
+    record_choice(cfg, "dae", "asr", 0.0)
+    record_choice(cfg, "dae", "ingest", 10.0)  # re-selection replaces the old choice
+    top = read_json(tmp_path / "dae" / "run_info.json")
+    assert top["chosen_hparam"] == {"ingest": 10.0, "asr": 0.0} and top["hparam_name"] == "min_snr_db"
+    assert read_json(run_dir(cfg, "dae", 10.0) / "run_info.json")["selected_for_layers"] == ["ingest"]
+    assert read_json(run_dir(cfg, "dae", 0.0) / "run_info.json")["selected_for_layers"] == ["asr"]
+    assert read_json(run_dir(cfg, "dae", 5.0) / "run_info.json")["selected_for_layers"] == []
+    record_choice(cfg, "dense", "ingest", None)  # untuned: no-op
+    assert not (tmp_path / "dense").exists()

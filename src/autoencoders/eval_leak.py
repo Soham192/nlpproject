@@ -22,7 +22,7 @@ import numpy as np
 import torch
 
 from .common import (auroc, baseline_dir, best_f1_threshold, candidate_runs, layer_dir, load_model, provenance,
-                     require_gpu, seed_everything, write_json, write_jsonl)
+                     record_choice, require_gpu, seed_everything, write_json, write_jsonl)
 from .config import VARIANTS, AEConfig, load_ae_config
 from .data import SplitCache, ensure_local_cache, load_split
 from .degrade import build_span, fill_signal, max_frame_rms_db, place_span
@@ -40,9 +40,21 @@ class Example:
     frag_ms: int
     edge: str
     audio: np.ndarray
+    split: str  # cache split it was built from ("dev_tune" / "test_leak"); fitting is allowed on dev only
 
 
-def build_examples(split: SplitCache, c: dict, seed: int, n: int | None = None) -> tuple[list[Example], int]:
+DEV_SPLITS = ("dev_tune",)
+
+
+def require_dev(ex: list[Example], what: str) -> None:
+    """Calibration and thresholds are fit on dev-clean only. Fail loudly if any other item sneaks in."""
+    bad = sorted({e.split for e in ex if e.split not in DEV_SPLITS})
+    if bad:
+        raise ValueError(f"{what} must be fit on dev items only; got items from {bad}")
+
+
+def build_examples(split: SplitCache, c: dict, seed: int, n: int | None = None,
+                   split_name: str = "") -> tuple[list[Example], int]:
     """Paired design: per utterance one span position; per fill one fill signal; frag 0 / 25 / 50 ms."""
     rng = np.random.default_rng(seed)
     frags = [0] + list(c["fragment_ms"])
@@ -57,7 +69,8 @@ def build_examples(split: SplitCache, c: dict, seed: int, n: int | None = None) 
         for fill in c["fills"]:
             sig = fill_signal(fill, e - s, rng, c)
             for f in frags:
-                out.append(Example(split.index[i]["id"], fill, f, edge, build_span(audio, s, e, edge, f, sig)))
+                out.append(Example(split.index[i]["id"], fill, f, edge, build_span(audio, s, e, edge, f, sig),
+                                   split_name))
     return out, skipped
 
 
@@ -89,6 +102,7 @@ def main_metric(tab: dict) -> float:
 
 
 def thresholds(ex: list[Example], scores: np.ndarray, c: dict) -> dict:
+    require_dev(ex, "leak thresholds")
     fills = np.array([e.fill for e in ex])
     frags = np.array([e.frag_ms for e in ex])
     return {fill: best_f1_threshold(scores[(fills == fill) & (frags == 0)], scores[(fills == fill) & (frags > 0)])
@@ -105,6 +119,7 @@ def calibrate(ex: list[Example], errs: list[np.ndarray], c: dict) -> dict:
     Digital silence gives (near-)identical windows, so std ~ 0; sigma is floored at 1% of mu to keep
     z-scores readable. The floor is monotone, so AUROC is unaffected.
     """
+    require_dev(ex, "leak calibration")
     out = {}
     for fill in c["fills"]:
         w = np.concatenate([er for e, er in zip(ex, errs) if e.fill == fill and e.frag_ms == 0])
@@ -121,8 +136,8 @@ def span_level(ex: list[Example], errs: list[np.ndarray], calib: dict) -> dict[s
 def _load_sets(cfg: AEConfig):
     root = ensure_local_cache(cfg)
     c = cfg.eval["leak"]
-    dev, dskip = build_examples(load_split(root, "dev_tune"), c, cfg.seed + DEV_SEED, c["dev_spans"])
-    test, tskip = build_examples(load_split(root, "test_leak"), c, cfg.seed + TEST_SEED)
+    dev, dskip = build_examples(load_split(root, "dev_tune"), c, cfg.seed + DEV_SEED, c["dev_spans"], "dev_tune")
+    test, tskip = build_examples(load_split(root, "test_leak"), c, cfg.seed + TEST_SEED, split_name="test_leak")
     counts = {"dev_spans": len(dev) // (len(c["fills"]) * (1 + len(c["fragment_ms"]))), "dev_skipped_utts": dskip,
               "test_spans": len(test) // (len(c["fills"]) * (1 + len(c["fragment_ms"]))), "test_skipped_utts": tskip}
     return c, dev, test, counts
@@ -161,6 +176,7 @@ def run_variant(cfg: AEConfig, variant: str) -> dict:
                "candidates": [{k: v for k, v in d.items() if not k.startswith("_")} for d in cands],
                **counts, "param_count": param_count(best["_model"]), **provenance(cfg)}
     write_json(layer_dir(cfg, variant, "leak") / "metrics.json", metrics)
+    record_choice(cfg, variant, "leak", best["hparam"])
     return metrics
 
 

@@ -88,6 +88,31 @@ def candidate_runs(cfg: AEConfig, variant: str) -> list[tuple[float | None, Path
     return found
 
 
+def record_choice(cfg: AEConfig, variant: str, layer: str, hparam: float | None) -> None:
+    """Write the dev-selected hyperparameter for `layer` into run_info.json: the variant-level file
+    (<drive>/<variant>/run_info.json -> chosen_hparam[layer]) and each grid run's own run_info.json
+    (selected_for_layers). No-op for untuned variants."""
+    grid = cfg.hparam_grid(variant)
+    if grid is None:
+        return
+    vpath = cfg.drive_root / variant / "run_info.json"
+    v = read_json(vpath) if vpath.exists() else {}
+    v.update({"variant": variant, "hparam_name": grid[0], "grid": grid[1],
+              "selection": "per layer, on dev-clean only"})
+    v.setdefault("chosen_hparam", {})[layer] = hparam
+    write_json(vpath, v)
+    for value in grid[1]:
+        rpath = run_dir(cfg, variant, value) / "run_info.json"
+        if not rpath.exists():
+            continue
+        r = read_json(rpath)
+        layers = set(r.get("selected_for_layers", [])) - {layer}
+        if value == hparam:
+            layers.add(layer)
+        r["selected_for_layers"] = sorted(layers)
+        write_json(rpath, r)
+
+
 # --------------------------------------------------------------------------- checkpoints
 
 def save_atomic(obj, path: Path) -> None:
