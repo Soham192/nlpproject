@@ -1,0 +1,12 @@
+# Render Blueprint: the React UI as a free static site. The API runs on a Hugging Face Space
+# (deploy/hf-space). Set VITE_API_BASE to the Space URL, e.g. https://<hf-user>-redact-api.hf.space.
+services:
+  - type: web
+    runtime: static
+    name: redact-ui
+    rootDir: web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE
+        sync: false          # prompted for in the Render dashboard on first deploy

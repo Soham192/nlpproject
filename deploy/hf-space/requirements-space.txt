@@ -1,0 +1,18 @@
+# Backend runtime for the Space, pinned to the versions the local venv runs and tests with.
+whisperx==3.8.6
+faster-whisper==1.2.1
+ctranslate2==4.8.2
+torchcodec==0.7.0
+transformers==4.57.6
+presidio-analyzer==2.2.364
+spacy==3.8.16
+en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
+jiwer==4.0.0
+bert-score==0.3.13
+cryptography==50.0.2
+PyYAML==6.0.3
+numpy==2.4.6
+matplotlib==3.11.2
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32

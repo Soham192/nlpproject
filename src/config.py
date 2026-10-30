@@ -111,6 +111,9 @@ def _build(raw: dict) -> Config:
     api = dict(raw.get("api") or {})
     if "cors_origins" in api:
         api["cors_origins"] = tuple(api["cors_origins"])
+    cors = os.environ.get("CORS_ORIGINS")  # comma-separated; set on the hosted backend
+    if cors:
+        api["cors_origins"] = tuple(o.strip().rstrip("/") for o in cors.split(",") if o.strip())
     env = os.environ.get("ALLOW_ORIGINAL_PLAYBACK")
     if env is not None:
         api["allow_original_playback"] = env.strip().lower() in ("1", "true", "yes", "on")

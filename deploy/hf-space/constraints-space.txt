@@ -1,0 +1,4 @@
+# Keep pip from swapping the CPU torch build for a CUDA one while resolving whisperx & co.
+torch==2.8.0
+torchaudio==2.8.0
+torchvision==0.23.0

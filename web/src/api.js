@@ -1,6 +1,11 @@
 // Thin fetch wrappers around the FastAPI backend. Nothing here ever handles key material:
 // unmasking is triggered from the browser but performed entirely on the server.
 
+// Backend origin. Empty = same origin (local dev via the Vite proxy, or the API serving web/dist).
+// Set VITE_API_BASE at build time when the UI is hosted separately, e.g. on Render with the API on a HF Space.
+const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+const url = (path) => `${API_BASE}${path}`;
+
 export class ApiError extends Error {
   constructor(detail, status) {
     const message = typeof detail === "string" ? detail : detail?.message ?? `HTTP ${status}`;
@@ -11,7 +16,7 @@ export class ApiError extends Error {
 }
 
 async function req(path, opts) {
-  const r = await fetch(path, opts);
+  const r = await fetch(url(path), opts);
   const body = await r.json().catch(() => null);
   if (!r.ok) throw new ApiError(body?.detail ?? r.statusText, r.status);
   return body;
@@ -32,7 +37,7 @@ export function upload(file, groundTruth) {
 export const getManifest = (fileId) => req(`/api/files/${fileId}/manifest`);
 
 // Raw WAV bytes straight from disk. `v` busts the browser cache after a re-mask.
-export const fileUrl = (fileId, name, v = "") => `/api/files/${fileId}/${name}${v ? `?v=${v}` : ""}`;
+export const fileUrl = (fileId, name, v = "") => url(`/api/files/${fileId}/${name}${v ? `?v=${v}` : ""}`);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

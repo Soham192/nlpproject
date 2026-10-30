@@ -170,3 +170,14 @@ def test_unknown_entity_type_rejected(setup):
     client, cfg, key, tmp_path = setup
     fid = _upload(client, make_wav(tmp_path / "in.wav")).json()["file_id"]
     assert client.post("/api/detect", json={"file_id": fid, "entity_types": ["NOPE"]}).status_code == 400
+
+
+def test_cors_origins_env_override(monkeypatch):
+    from src.config import DEFAULT_CONFIG_PATH, _build
+    import yaml
+
+    raw = yaml.safe_load(open(DEFAULT_CONFIG_PATH))
+    monkeypatch.setenv("CORS_ORIGINS", "https://redact-ui.onrender.com/, http://localhost:5173")
+    assert _build(raw).api.cors_origins == ("https://redact-ui.onrender.com", "http://localhost:5173")
+    monkeypatch.delenv("CORS_ORIGINS")
+    assert _build(raw).api.cors_origins == tuple(raw["api"]["cors_origins"])
