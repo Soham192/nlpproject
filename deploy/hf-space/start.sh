@@ -7,4 +7,5 @@ if [ -n "$REDACT_KEY_B64" ]; then
 fi
 # Every model is baked into the image (prefetch.py); don't spend time checking the Hub on each load.
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
-exec uvicorn api.main:app --host 0.0.0.0 --port 7860
+# Cloud Run injects PORT (deployed with --port 7860); Hugging Face Spaces expect 7860.
+exec uvicorn api.main:app --host 0.0.0.0 --port "${PORT:-7860}"
